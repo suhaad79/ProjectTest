@@ -1,0 +1,343 @@
+name: builder
+
+on:
+  push:
+    branches:
+      - dev-test
+jobs:
+  ###########################
+  #      Artemis for OSX    #
+  ###########################
+  buildArtemisForOSX:
+    name: Build for ${{ matrix.targetPlatform }} on version ${{ matrix.unityVersion }}
+    runs-on: label-2
+    strategy:
+      fail-fast: false
+      matrix:
+        projectPath:
+          - U.GB
+        targetPlatform:
+          - StandaloneOSX # Build a macOS standalone (Intel 64-bit).
+    steps:
+      ###########################
+      #         Checkout        #
+      ###########################
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      ###########################
+      #          Cache          #
+      ###########################
+      - uses: actions/cache@v2
+        with:
+          path: ${{ matrix.projectPath }}/Library
+          key: Library-${{ matrix.projectPath }}-${{ matrix.targetPlatform }}
+          restore-keys: |
+            Library-${{ matrix.projectPath }}-
+            Library-
+      ###########################
+      #        Build-OSX        #
+      ###########################
+      - uses: EmperiaFergus/unity-builder@v3.7ab
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          SCRIPTING_DEFINE_SYMBOL: ${{ secrets.ARTEMIS_DEFINE_SYMBOL }}
+        with:
+          buildMethod: UnityBuilderAction.BuildScript.Build
+          customParameters: -Development
+          projectPath: ${{ matrix.projectPath }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          s3InstallerAccessKey: ${{secrets.S3_ACCESS_KEY}}
+          s3InstallerSecretKey: ${{secrets.S3_SECRET_KEY}}
+          scriptingDefineSymbol: ARTEMIS
+          APIClientSecret: ${{secrets.API_CLIENT_SECRET}}
+          APIClientID: ${{secrets.API_CLIENT_ID}}
+          APIProductionAuthServerUrl: ${{secrets.API_PRODUCTION_AUTH_SERVER_URL}}
+          APIProductionServerUrl: ${{secrets.API_PRODUCTION_SERVER_URL}}
+          APIStagingAuthServerUrl: ${{secrets.API_STAGING_AUTH_SERVER_URL}}
+          APIStagingServerUrl: ${{secrets.API_STAGING_SERVER_URL}}
+      ###########################
+      #        Upload-OSX       #
+      ###########################
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Artemis-OSX
+          path: build/StandaloneOSX
+          retention-days: 14
+  ###########################
+  #    publish Artemis OSX  #
+  ###########################
+  publishArtemisOSX:
+    name: publish with patchkit
+    needs: buildArtemisForOSX
+    runs-on: label-2
+    strategy:
+      matrix:
+        projectPath:
+          - U.GB
+    steps:
+      - name: download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: Artemis-OSX
+          path: ./${{ matrix.projectPath }}/build/build-mac.zip
+      - name: publish to patchkit
+        uses: EmperiaFergus/actions-patchkit@v0.an
+        with:
+          api-key: ${{secrets.PATCHKIT_API_KEY}}
+          secret-key: ${{secrets.PATCHKIT_SECRET_ARTEMIS_OSX}}
+          path: /home/runner/work/Apollo/Apollo/U.GB/build/build-mac.zip
+  ###########################
+  #    Artemis for Windows  #
+  ###########################
+  buildArtemisForWindows:
+    name: Build for ${{ matrix.targetPlatform }} on version ${{ matrix.unityVersion }}
+    needs: publishArtemisOSX
+    runs-on: label-2
+    strategy:
+      fail-fast: false
+      matrix:
+        projectPath:
+          - U.GB
+        targetPlatform:
+          - StandaloneWindows64 # Build a Windows 64-bit standalone.
+    steps:
+      ###########################
+      #         Checkout        #
+      ###########################
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      ###########################
+      #          Cache          #
+      ###########################
+      - uses: actions/cache@v2
+        with:
+          path: ${{ matrix.projectPath }}/Library
+          key: Library-${{ matrix.projectPath }}-${{ matrix.targetPlatform }}
+          restore-keys: |
+            Library-${{ matrix.projectPath }}-
+            Library-
+      ###########################
+      #  Build Artemis Windows  #
+      ###########################
+      - uses: EmperiaFergus/unity-builder@v3.7ab
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          SCRIPTING_DEFINE_SYMBOL: ${{ secrets.ARTEMIS_DEFINE_SYMBOL }}
+        with:
+          buildMethod: UnityBuilderAction.BuildScript.Build
+          customParameters: -Development
+          projectPath: ${{ matrix.projectPath }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          s3InstallerAccessKey: ${{secrets.S3_ACCESS_KEY}}
+          s3InstallerSecretKey: ${{secrets.S3_SECRET_KEY}}
+          scriptingDefineSymbol: ARTEMIS
+          APIClientSecret: ${{secrets.API_CLIENT_SECRET}}
+          APIClientID: ${{secrets.API_CLIENT_ID}}
+          APIProductionAuthServerUrl: ${{secrets.API_PRODUCTION_AUTH_SERVER_URL}}
+          APIProductionServerUrl: ${{secrets.API_PRODUCTION_SERVER_URL}}
+          APIStagingAuthServerUrl: ${{secrets.API_STAGING_AUTH_SERVER_URL}}
+          APIStagingServerUrl: ${{secrets.API_STAGING_SERVER_URL}}
+      ###########################
+      # Upload Artemis Windows  #
+      ###########################
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Artemis-WIN
+          path: build/StandaloneOSX
+          retention-days: 14
+
+      ###########################
+      # publish Artemis Windows #
+      ###########################
+  publishArtemisWindows:
+    name: publish with patchkit
+    needs: buildArtemisForWindows
+    runs-on: label-2
+    strategy:
+      matrix:
+        projectPath:
+          - U.GB
+    steps:
+      - name: download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: Artemis-WIN
+          path: ./${{ matrix.projectPath }}/build/build-win.zip
+      - name: publish to patchkit
+        uses: EmperiaFergus/actions-patchkit@v0.an
+        with:
+          api-key: ${{secrets.PATCHKIT_API_KEY}}
+          secret-key: ${{secrets.PATCHKIT_SECRET_ARTEMIS_WINDOWS}}
+          path: /home/runner/work/Apollo/Apollo/U.GB/build/build-win.zip
+  ###########################
+  #      Apollo for OSX     #
+  ###########################
+  buildApolloForOSX:
+    name: Build for ${{ matrix.targetPlatform }} on version ${{ matrix.unityVersion }}
+    runs-on: label-2
+    strategy:
+      fail-fast: false
+      matrix:
+        projectPath:
+          - U.GB
+        targetPlatform:
+          - StandaloneOSX # Build a macOS standalone (Intel 64-bit).
+    steps:
+      ###########################
+      #         Checkout        #
+      ###########################
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      ###########################
+      #          Cache          #
+      ###########################
+      - uses: actions/cache@v2
+        with:
+          path: ${{ matrix.projectPath }}/Library
+          key: Library-${{ matrix.projectPath }}-${{ matrix.targetPlatform }}
+          restore-keys: |
+            Library-${{ matrix.projectPath }}-
+            Library-
+      ###########################
+      #        Build-OSX        #
+      ###########################
+      - uses: EmperiaFergus/unity-builder@v3.7ab
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          SCRIPTING_DEFINE_SYMBOL: ${{ secrets.APOLLO_DEFINE_SYMBOL }}
+        with:
+          buildMethod: UnityBuilderAction.BuildScript.Build
+          customParameters: -Development
+          projectPath: ${{ matrix.projectPath }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          s3InstallerAccessKey: ${{secrets.S3_ACCESS_KEY}}
+          s3InstallerSecretKey: ${{secrets.S3_SECRET_KEY}}
+          scriptingDefineSymbol: APOLLO
+          APIClientSecret: ${{secrets.API_CLIENT_SECRET}}
+          APIClientID: ${{secrets.API_CLIENT_ID}}
+          APIProductionAuthServerUrl: ${{secrets.API_PRODUCTION_AUTH_SERVER_URL}}
+          APIProductionServerUrl: ${{secrets.API_PRODUCTION_SERVER_URL}}
+          APIStagingAuthServerUrl: ${{secrets.API_STAGING_AUTH_SERVER_URL}}
+          APIStagingServerUrl: ${{secrets.API_STAGING_SERVER_URL}}
+      ###########################
+      #        Upload-OSX       #
+      ###########################
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Apollo-OSX
+          path: build/StandaloneOSX
+          retention-days: 14
+  ###########################
+  #    publish Apollo OSX   #
+  ###########################
+  publishApolloOSX:
+    name: publish with patchkit
+    needs: buildApolloForOSX
+    runs-on: label-2
+    strategy:
+      matrix:
+        projectPath:
+          - U.GB
+    steps:
+      - name: download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: Apollo-OSX
+          path: ./${{ matrix.projectPath }}/build/build-mac.zip
+      - name: publish to patchkit
+        uses: EmperiaFergus/actions-patchkit@v0.an
+        with:
+          api-key: ${{secrets.PATCHKIT_API_KEY}}
+          secret-key: ${{secrets.PATCHKIT_SECRET_APOLLO_OSX}}
+          path: /home/runner/work/Apollo/Apollo/U.GB/build/build-mac.zip
+  ###########################
+  #    Apollo for Windows   #
+  ###########################
+  buildApolloForWindows:
+    name: Build for ${{ matrix.targetPlatform }} on version ${{ matrix.unityVersion }}
+    needs: buildApolloForOSX
+    runs-on: label-2
+    strategy:
+      fail-fast: false
+      matrix:
+        projectPath:
+          - U.GB
+        targetPlatform:
+          - StandaloneWindows64 # Build a Windows 64-bit standalone.
+    steps:
+      ###########################
+      #         Checkout        #
+      ###########################
+      - uses: actions/checkout@v2
+        with:
+          lfs: true
+
+      ###########################
+      #          Cache          #
+      ###########################
+      - uses: actions/cache@v2
+        with:
+          path: ${{ matrix.projectPath }}/Library
+          key: Library-${{ matrix.projectPath }}-${{ matrix.targetPlatform }}
+          restore-keys: |
+            Library-${{ matrix.projectPath }}-
+            Library-
+      ###########################
+      #   Build Apollo Windows  #
+      ###########################
+      - uses: EmperiaFergus/unity-builder@v3.7ab
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          SCRIPTING_DEFINE_SYMBOL: ${{ secrets.APOLLO_DEFINE_SYMBOL }}
+        with:
+          buildMethod: UnityBuilderAction.BuildScript.Build
+          customParameters: -Development
+          projectPath: ${{ matrix.projectPath }}
+          targetPlatform: ${{ matrix.targetPlatform }}
+          s3InstallerAccessKey: ${{secrets.S3_ACCESS_KEY}}
+          s3InstallerSecretKey: ${{secrets.S3_SECRET_KEY}}
+          scriptingDefineSymbol: APOLLO
+          APIClientSecret: ${{secrets.API_CLIENT_SECRET}}
+          APIClientID: ${{secrets.API_CLIENT_ID}}
+          APIProductionAuthServerUrl: ${{secrets.API_PRODUCTION_AUTH_SERVER_URL}}
+          APIProductionServerUrl: ${{secrets.API_PRODUCTION_SERVER_URL}}
+          APIStagingAuthServerUrl: ${{secrets.API_STAGING_AUTH_SERVER_URL}}
+          APIStagingServerUrl: ${{secrets.API_STAGING_SERVER_URL}}
+      ###########################
+      #  Upload Apollo Windows  #
+      ###########################
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Apollo-WIN
+          path: build/StandaloneOSX
+          retention-days: 14
+
+      ###########################
+      # publish Apollo Windows #
+      ###########################
+  publish:
+    name: publish with patchkit
+    needs: buildApolloForWindows
+    runs-on: label-2
+    strategy:
+      matrix:
+        projectPath:
+          - U.GB
+    steps:
+      - name: download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: Artemis-WIN
+          path: ./${{ matrix.projectPath }}/build/build-win.zip
+      - name: publish to patchkit
+        uses: EmperiaFergus/actions-patchkit@v0.an
+        with:
+          api-key: ${{secrets.PATCHKIT_API_KEY}}
+          secret-key: ${{secrets.PATCHKIT_SECRET_ARTEMIS_WINDOWS}}
+          path: /home/runner/work/Apollo/Apollo/U.GB/build/1/build-win.zip
